@@ -1,0 +1,20 @@
+# railway.toml - Railway deployment configuration
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "python main.py"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Environment variables will be set in Railway dashboard
+# Required variables:
+# - PGHOST (automatically provided by Railway PostgreSQL)
+# - PGPORT (automatically provided by Railway PostgreSQL)  
+# - PGDATABASE (automatically provided by Railway PostgreSQL)
+# - PGUSER (automatically provided by Railway PostgreSQL)
+# - PGPASSWORD (automatically provided by Railway PostgreSQL)
+# - OPENAI_API_KEY (set manually)
+# - RAILWAY_ENVIRONMENT (automatically set by Railway)
