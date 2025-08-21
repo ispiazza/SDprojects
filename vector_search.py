@@ -1,5 +1,5 @@
 """
-Vector Search API using ChromaDB
+Fixed Vector Search API using ChromaDB
 Provides semantic search capabilities for museum archive
 """
 import os
@@ -25,12 +25,17 @@ class VectorSearchEngine:
     def initialize(self):
         """Initialize ChromaDB client and embedding model"""
         try:
-            # Initialize ChromaDB
+            # Initialize ChromaDB with proper settings to avoid telemetry errors
             self.chroma_client = chromadb.PersistentClient(
                 path="./chromadb_data",
                 settings=Settings(
                     anonymized_telemetry=False,
-                    allow_reset=True
+                    allow_reset=True,
+                    chroma_server_host=None,
+                    chroma_server_http_port=None,
+                    chroma_server_ssl_enabled=False,
+                    chroma_server_grpc_port=None,
+                    chroma_server_cors_allow_origins=None
                 )
             )
             
@@ -41,10 +46,15 @@ class VectorSearchEngine:
             
         except Exception as e:
             logger.error(f"Failed to initialize vector search engine: {e}")
-            raise
+            # Don't raise - allow app to continue without vector search
+            self.chroma_client = None
+            self.embedding_model = None
     
     def create_collection(self, collection_name: str, metadata: Dict = None) -> bool:
         """Create or get ChromaDB collection"""
+        if not self.chroma_client:
+            return False
+            
         try:
             collection = self.chroma_client.get_or_create_collection(
                 name=collection_name,
@@ -60,6 +70,9 @@ class VectorSearchEngine:
     def add_document(self, collection_name: str, document_id: str, 
                     text: str, metadata: Dict = None) -> bool:
         """Add document to ChromaDB collection with vector embedding"""
+        if not self.chroma_client or not self.embedding_model:
+            return False
+            
         try:
             collection = self.chroma_client.get_or_create_collection(collection_name)
             
@@ -81,46 +94,12 @@ class VectorSearchEngine:
             logger.error(f"Failed to add document to collection: {e}")
             return False
     
-    def update_document(self, collection_name: str, document_id: str,
-                       text: str, metadata: Dict = None) -> bool:
-        """Update existing document in ChromaDB collection"""
-        try:
-            collection = self.chroma_client.get_collection(collection_name)
-            
-            # Generate new embedding
-            embedding = self.embedding_model.encode(text).tolist()
-            
-            # Update document
-            collection.update(
-                embeddings=[embedding],
-                documents=[text],
-                metadatas=[metadata or {}],
-                ids=[document_id]
-            )
-            
-            logger.info(f"Updated document '{document_id}' in collection '{collection_name}'")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to update document: {e}")
-            return False
-    
-    def delete_document(self, collection_name: str, document_id: str) -> bool:
-        """Delete document from ChromaDB collection"""
-        try:
-            collection = self.chroma_client.get_collection(collection_name)
-            collection.delete(ids=[document_id])
-            
-            logger.info(f"Deleted document '{document_id}' from collection '{collection_name}'")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to delete document: {e}")
-            return False
-    
     def search(self, collection_name: str, query_text: str, 
               limit: int = 10, metadata_filter: Dict = None) -> List[Dict]:
         """Perform semantic search in ChromaDB collection"""
+        if not self.chroma_client or not self.embedding_model:
+            return []
+            
         try:
             collection = self.chroma_client.get_collection(collection_name)
             
@@ -153,121 +132,15 @@ class VectorSearchEngine:
             logger.error(f"Failed to perform search: {e}")
             return []
     
-    def hybrid_search(self, collection_name: str, query_text: str,
-                     postgres_results: List[Dict], limit: int = 10) -> List[Dict]:
-        """Combine semantic search with PostgreSQL full-text search results"""
-        try:
-            # Get semantic search results
-            semantic_results = self.search(collection_name, query_text, limit * 2)
-            
-            # Create a mapping of record IDs to semantic scores
-            semantic_scores = {}
-            for result in semantic_results:
-                if 'metadata' in result and 'record_id' in result['metadata']:
-                    record_id = result['metadata']['record_id']
-                    semantic_scores[record_id] = result['similarity']
-            
-            # Combine with PostgreSQL results
-            combined_results = []
-            
-            # Add PostgreSQL results with semantic scores
-            for pg_result in postgres_results:
-                record_id = pg_result.get('id')
-                semantic_score = semantic_scores.get(record_id, 0)
-                text_score = pg_result.get('rank', 0)
-                
-                # Calculate combined score (weighted average)
-                combined_score = (semantic_score * 0.6) + (text_score * 0.4)
-                
-                combined_results.append({
-                    **pg_result,
-                    'semantic_score': semantic_score,
-                    'text_score': text_score,
-                    'combined_score': combined_score,
-                    'search_type': 'hybrid'
-                })
-            
-            # Add purely semantic results that weren't in PostgreSQL results
-            pg_record_ids = {result.get('id') for result in postgres_results}
-            for result in semantic_results:
-                if 'metadata' in result and 'record_id' in result['metadata']:
-                    record_id = result['metadata']['record_id']
-                    if record_id not in pg_record_ids:
-                        combined_results.append({
-                            'id': record_id,
-                            'title': result['metadata'].get('title', ''),
-                            'creator': result['metadata'].get('creator', ''),
-                            'type': result['metadata'].get('type', ''),
-                            'semantic_score': result['similarity'],
-                            'text_score': 0,
-                            'combined_score': result['similarity'] * 0.6,
-                            'search_type': 'semantic_only'
-                        })
-            
-            # Sort by combined score
-            combined_results.sort(key=lambda x: x['combined_score'], reverse=True)
-            
-            return combined_results[:limit]
-            
-        except Exception as e:
-            logger.error(f"Failed to perform hybrid search: {e}")
-            return postgres_results[:limit]  # Fallback to PostgreSQL results
-    
-    def get_similar_documents(self, collection_name: str, document_id: str,
-                             limit: int = 5) -> List[Dict]:
-        """Find documents similar to a given document"""
-        try:
-            collection = self.chroma_client.get_collection(collection_name)
-            
-            # Get the document
-            doc_result = collection.get(ids=[document_id])
-            if not doc_result['documents'] or len(doc_result['documents']) == 0:
-                return []
-            
-            document_text = doc_result['documents'][0]
-            
-            # Find similar documents
-            return self.search(collection_name, document_text, limit + 1)
-            
-        except Exception as e:
-            logger.error(f"Failed to find similar documents: {e}")
-            return []
-    
-    def get_collection_stats(self, collection_name: str) -> Dict:
-        """Get statistics about a ChromaDB collection"""
-        try:
-            collection = self.chroma_client.get_collection(collection_name)
-            count = collection.count()
-            
-            return {
-                'collection_name': collection_name,
-                'document_count': count,
-                'embedding_model': self.model_name
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to get collection stats: {e}")
-            return {}
-    
-    def list_collections(self) -> List[Dict]:
-        """List all ChromaDB collections with their stats"""
-        try:
-            collections = self.chroma_client.list_collections()
-            collection_info = []
-            
-            for collection in collections:
-                stats = self.get_collection_stats(collection.name)
-                collection_info.append(stats)
-            
-            return collection_info
-            
-        except Exception as e:
-            logger.error(f"Failed to list collections: {e}")
-            return []
-    
     def health_check(self) -> Dict:
         """Check the health of the vector search engine"""
         try:
+            if not self.chroma_client:
+                return {
+                    'status': 'unavailable',
+                    'error': 'ChromaDB client not initialized'
+                }
+                
             collections = self.chroma_client.list_collections()
             model_loaded = self.embedding_model is not None
             
@@ -286,5 +159,9 @@ class VectorSearchEngine:
                 'error': str(e)
             }
 
-# Global instance
-vector_search = VectorSearchEngine()
+# Global instance - with error handling
+try:
+    vector_search = VectorSearchEngine()
+except Exception as e:
+    logger.error(f"Failed to initialize global vector search: {e}")
+    vector_search = None
