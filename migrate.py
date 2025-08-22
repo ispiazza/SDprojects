@@ -157,7 +157,6 @@ class RailwayMigrator:
             'port': 5432,
             'database': 'postgres',
             'user': 'postgres',
-            'password': 'postgres',
         }
     
     def test_connection(self) -> bool:
