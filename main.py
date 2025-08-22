@@ -612,7 +612,7 @@ async def dashboard():
 
 if __name__ == "__main__":
     # Railway automatically sets the PORT environment variable
-    port = int(os.getenv("PORT", 8000))
+    port = 8000
     
     logger.info(f"Starting Museum Archive API on port {port}")
     logger.info(f"Vector search available: {VECTOR_SEARCH_AVAILABLE}")

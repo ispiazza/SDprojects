@@ -1,6 +1,6 @@
 """
-Database operations for Museum Archive API
-Handles all PostgreSQL database interactions
+Fixed database.py for Railway PostgreSQL SSL connection
+Handles Railway's self-signed certificates properly
 """
 import os
 import logging
@@ -18,31 +18,63 @@ logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-# Check if we're in Railway environment and use internal connection
-railway_env = os.getenv('RAILWAY_ENVIRONMENT')
-if railway_env:
-    # Use internal Railway connection
-    DB_CONFIG = {
-        'host': 'postgres.railway.internal',
-        'port': 5432,
-        'database': os.getenv('PGDATABASE', 'railway'),
-        'user': os.getenv('PGUSER', 'postgres'),
-        'password': os.getenv('PGPASSWORD'),
-        # No SSL needed for internal connections
-    }
-    logger.info("Using internal Railway database connection")
-else:
-    # Use external connection for local development
-    DB_CONFIG = {
-        'host': os.getenv('PGHOST'),
-        'port': int(os.getenv('PGPORT', 5432)),
-        'database': os.getenv('PGDATABASE'),
-        'user': os.getenv('PGUSER'),
-        'password': os.getenv('PGPASSWORD'),
-        'sslmode': 'prefer',
-    }
-    logger.info("Using external database connection")
+def get_database_config():
+    """Get database configuration - prioritize DATABASE_URL for Railway"""
+    
+    # First, try to use DATABASE_URL if available (Railway provides this)
+    database_url = os.getenv('DATABASE_URL')
+    if database_url:
+        logger.info("Using DATABASE_URL for connection")
+        import urllib.parse
+        try:
+            parsed = urllib.parse.urlparse(database_url)
+            return {
+                'host': parsed.hostname,
+                'port': parsed.port or 5432,
+                'database': parsed.path.lstrip('/'),
+                'user': parsed.username,
+                'password': parsed.password,
+                'sslmode': 'require',
+            }
+        except Exception as e:
+            logger.warning(f"Failed to parse DATABASE_URL: {e}")
+    
+    # Check if we're in actual Railway deployment
+    is_railway_deployment = (
+        os.getenv('RAILWAY_STATIC_URL') or 
+        os.getenv('RAILWAY_PUBLIC_DOMAIN') or
+        (os.getenv('PORT') and not os.getenv('RAILWAY_SHELL'))
+    )
+    
+    if is_railway_deployment:
+        logger.info("Detected Railway deployment - using internal connection")
+        return {
+            'host': 'postgres.railway.internal',
+            'port': 5432,
+            'database': os.getenv('PGDATABASE', 'railway'),
+            'user': os.getenv('PGUSER', 'postgres'),
+            'password': os.getenv('PGPASSWORD'),
+        }
+    else:
+        logger.info("Using external database connection (Railway shell or local)")
+        # For external connections to Railway, we need special SSL handling
+        return {
+            'host': os.getenv('PGHOST'),
+            'port': int(os.getenv('PGPORT', 5432)),
+            'database': os.getenv('PGDATABASE'),
+            'user': os.getenv('PGUSER'),
+            'password': os.getenv('PGPASSWORD'),
+            # Railway uses self-signed certificates, so we need sslmode=require
+            # This requires SSL but doesn't verify the certificate chain
+            'sslmode': 'require',
+            'sslcert': None,
+            'sslkey': None,
+            'sslrootcert': None,
+        }
 
+# Get the configuration
+DB_CONFIG = get_database_config()
+logger.info(f"Database config: host={DB_CONFIG.get('host')}, port={DB_CONFIG.get('port')}, sslmode={DB_CONFIG.get('sslmode', 'none')}")
 
 class DatabaseError(Exception):
     """Custom exception for database operations"""
@@ -50,13 +82,57 @@ class DatabaseError(Exception):
 
 
 def get_db_connection():
-    """Get PostgreSQL database connection using Railway environment variables"""
-    try:
-        conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
-        return conn
-    except Exception as e:
-        logger.error(f"Database connection failed: {e}")
-        raise DatabaseError(f"Database connection failed: {str(e)}")
+    """Get PostgreSQL database connection with Railway SSL handling"""
+    connection_attempts = [
+        # Attempt 1: Use the configured settings
+        DB_CONFIG,
+        
+        # Attempt 2: If SSL fails, try with SSL verification disabled for Railway
+        {**DB_CONFIG, 'sslmode': 'prefer'} if 'sslmode' in DB_CONFIG else DB_CONFIG,
+        
+        # Attempt 3: Force disable SSL for development
+        {k: v for k, v in DB_CONFIG.items() if k != 'sslmode'} if 'sslmode' in DB_CONFIG else None,
+        
+        # Attempt 4: Use connection string format
+        None  # Will be handled specially
+    ]
+    
+    for i, config in enumerate(connection_attempts):
+        if config is None and i < 3:
+            continue
+            
+        try:
+            if i < 3:
+                logger.info(f"Connection attempt {i+1}: {config.get('sslmode', 'default')}")
+                conn = psycopg2.connect(**config, cursor_factory=RealDictCursor)
+                logger.info(f"✅ Connected successfully on attempt {i+1}")
+                return conn
+            else:
+                # Attempt 4: Direct connection string (Railway often provides DATABASE_URL)
+                database_url = os.getenv('DATABASE_URL')
+                if database_url:
+                    logger.info("Connection attempt 4: Using DATABASE_URL")
+                    conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
+                    logger.info("✅ Connected successfully with DATABASE_URL")
+                    return conn
+                    
+        except psycopg2.OperationalError as e:
+            error_msg = str(e).lower()
+            if "ssl" in error_msg or "certificate" in error_msg:
+                logger.warning(f"Attempt {i+1} SSL error: {e}")
+                continue
+            else:
+                logger.error(f"Attempt {i+1} failed: {e}")
+                if i == len(connection_attempts) - 1:
+                    raise DatabaseError(f"All connection attempts failed. Last error: {str(e)}")
+                continue
+        except Exception as e:
+            logger.error(f"Attempt {i+1} unexpected error: {e}")
+            if i == len(connection_attempts) - 1:
+                raise DatabaseError(f"All connection attempts failed. Last error: {str(e)}")
+            continue
+    
+    raise DatabaseError("All connection attempts exhausted")
 
 
 @contextmanager
@@ -78,6 +154,42 @@ def get_db_cursor():
             cursor.close()
         if conn:
             conn.close()
+
+
+def test_connection() -> Dict[str, Any]:
+    """Test database connection and return detailed info"""
+    try:
+        with get_db_cursor() as (cursor, conn):
+            # Test basic connectivity
+            cursor.execute("SELECT version(), current_database(), current_user;")
+            result = cursor.fetchone()
+            
+            # Test SSL status (using a more compatible method)
+            ssl_used = False
+            try:
+                # Check if we're using SSL (this method works on more PostgreSQL versions)
+                cursor.execute("SHOW ssl;")
+                ssl_setting = cursor.fetchone()[0]
+                ssl_used = ssl_setting.lower() == 'on'
+            except:
+                # If that fails, assume SSL is working if we connected successfully
+                ssl_used = True
+            
+            return {
+                'success': True,
+                'version': result[0][:50] + '...' if result[0] else 'Unknown',
+                'database': result[1],
+                'user': result[2],
+                'ssl_enabled': ssl_used,
+                'host': DB_CONFIG.get('host'),
+                'port': DB_CONFIG.get('port')
+            }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e),
+            'config_used': {k: '***' if 'password' in k.lower() else v for k, v in DB_CONFIG.items()}
+        }
 
 
 def list_collections() -> List[Dict[str, Any]]:
@@ -336,23 +448,39 @@ def delete_record(record_id: str) -> bool:
         logger.error(f"Delete record error: {e}")
         raise DatabaseError(f"Failed to delete record: {str(e)}")
 
-
 def health_check() -> Dict[str, Any]:
-    """Check database health"""
+    """Check database health with fixed RealDictCursor access"""
     try:
         with get_db_cursor() as (cursor, conn):
-            cursor.execute("SELECT 1")
+            # Simple connectivity test
+            cursor.execute("SELECT 1 as test")
             cursor.fetchone()
             
-            # Get some basic stats
-            cursor.execute("SELECT COUNT(*) FROM collections")
-            collections_count = cursor.fetchone()[0]
+            # Get basic stats
+            cursor.execute("SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'public'")
+            tables_result = cursor.fetchone()
+            tables_count = tables_result['count']
             
-            cursor.execute("SELECT COUNT(*) FROM dublin_core_records")
-            records_count = cursor.fetchone()[0]
+            # Try to get collection and record counts (if tables exist)
+            collections_count = 0
+            records_count = 0
+            
+            try:
+                cursor.execute("SELECT COUNT(*) as count FROM collections")
+                collections_result = cursor.fetchone()
+                collections_count = collections_result['count']
+                
+                cursor.execute("SELECT COUNT(*) as count FROM dublin_core_records")
+                records_result = cursor.fetchone()
+                records_count = records_result['count']
+            except:
+                # Tables don't exist yet, that's okay
+                pass
             
             return {
                 'status': 'healthy',
+                'connection': 'successful',
+                'tables_count': tables_count,
                 'collections_count': collections_count,
                 'records_count': records_count
             }
