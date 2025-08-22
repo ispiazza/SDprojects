@@ -18,15 +18,30 @@ logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-# Database configuration using Railway environment variables with SSL
-DB_CONFIG = {
-    'host': os.getenv('PGHOST'),
-    'port': int(os.getenv('PGPORT', 5432)),
-    'database': os.getenv('PGDATABASE'),
-    'user': os.getenv('PGUSER'),
-    'password': os.getenv('PGPASSWORD'),
-    'sslmode': 'require',  # Required for Railway external connections
-}
+# Check if we're in Railway environment and use internal connection
+railway_env = os.getenv('RAILWAY_ENVIRONMENT')
+if railway_env:
+    # Use internal Railway connection
+    DB_CONFIG = {
+        'host': 'postgres.railway.internal',
+        'port': 5432,
+        'database': os.getenv('PGDATABASE', 'railway'),
+        'user': os.getenv('PGUSER', 'postgres'),
+        'password': os.getenv('PGPASSWORD'),
+        # No SSL needed for internal connections
+    }
+    logger.info("Using internal Railway database connection")
+else:
+    # Use external connection for local development
+    DB_CONFIG = {
+        'host': os.getenv('PGHOST'),
+        'port': int(os.getenv('PGPORT', 5432)),
+        'database': os.getenv('PGDATABASE'),
+        'user': os.getenv('PGUSER'),
+        'password': os.getenv('PGPASSWORD'),
+        'sslmode': 'prefer',
+    }
+    logger.info("Using external database connection")
 
 
 class DatabaseError(Exception):
