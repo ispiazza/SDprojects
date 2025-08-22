@@ -25,17 +25,13 @@ class VectorSearchEngine:
     def initialize(self):
         """Initialize ChromaDB client and embedding model"""
         try:
-            # Initialize ChromaDB with proper settings to avoid telemetry errors
+            # Initialize ChromaDB with fixed settings
             self.chroma_client = chromadb.PersistentClient(
                 path="./chromadb_data",
                 settings=Settings(
                     anonymized_telemetry=False,
-                    allow_reset=True,
-                    chroma_server_host=None,
-                    chroma_server_http_port=None,
-                    chroma_server_ssl_enabled=False,
-                    chroma_server_grpc_port=None,
-                    chroma_server_cors_allow_origins=None
+                    allow_reset=True
+                    # Removed the problematic CORS settings
                 )
             )
             
