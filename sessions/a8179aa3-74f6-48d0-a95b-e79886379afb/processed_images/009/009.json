@@ -1,0 +1,20 @@
+{
+  "id_number": "26.3",
+  "metadata": {
+    "handwritten_notes": [],
+    "printed_labels": [
+      "7/10/02",
+      "21/08/2002",
+      "MAH"
+    ],
+    "addresses": [],
+    "other_markings": []
+  },
+  "extraction_notes": "The printed labels are faint but legible. No handwritten notes or addresses were found.",
+  "processing_info": {
+    "image_path": "sessions/a8179aa3-74f6-48d0-a95b-e79886379afb/processed_images/009/Image_009B.jpg",
+    "directory": "009",
+    "processed_at": "2025-08-22 16:26:30",
+    "model_used": "gpt-4o"
+  }
+}

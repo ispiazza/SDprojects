@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Refactored Main FastAPI application for Railway deployment
-Museum Archive API with PostgreSQL and ChromaDB integration
+Updated Main FastAPI application with Pipeline Integration
+Museum Archive API with PostgreSQL, ChromaDB, and Image Pipeline
 """
 import os
 import logging
@@ -14,21 +14,16 @@ from fastapi.responses import HTMLResponse
 import uvicorn
 from pathlib import Path
 
-# Import our refactored modules
+# Import our modules
 from models.base import DocumentRequest, SearchRequest, ChatMessage, CollectionRequest, DublinCoreRecord
 import database
 import upload
 
+# Import the new pipeline integration
+from pipeline_integration import pipeline_router
+
 from dotenv import load_dotenv
-load_dotenv(override=True)  # Load environment variables from .env file
-import os
-print("=== Environment Variables ===")
-print(f"PGHOST: {os.getenv('PGHOST')}")
-print(f"PGPORT: {os.getenv('PGPORT')}")
-print(f"PGDATABASE: {os.getenv('PGDATABASE')}")
-print(f"PGUSER: {os.getenv('PGUSER')}")
-print(f"PGPASSWORD: {'***' if os.getenv('PGPASSWORD') else 'None'}")
-print("============================")
+load_dotenv(override=True)
 
 # Create necessary directories
 os.makedirs("chromadb_data", exist_ok=True)
@@ -62,19 +57,22 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Museum Archive API",
-    description="Railway-deployed API for PostgreSQL and ChromaDB integration with museum archive",
-    version="2.0.0"
+    title="Museum Archive API with Pipeline",
+    description="Complete museum archive system with image processing pipeline",
+    version="3.0.0"
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include the pipeline router
+app.include_router(pipeline_router)
 
 # Serve static files
 if Path("static").exists():
@@ -98,20 +96,27 @@ if CHATBOT_AVAILABLE:
 async def root():
     """Root endpoint with basic info"""
     return {
-        "message": "Museum Archive API - Railway Deployment",
-        "version": "2.0.0",
+        "message": "Museum Archive API with Pipeline Integration",
+        "version": "3.0.0",
         "status": "running",
+        "features": {
+            "database": "PostgreSQL",
+            "vector_search": "ChromaDB" if VECTOR_SEARCH_AVAILABLE else "Unavailable",
+            "chatbot": "Available" if chatbot else "Unavailable",
+            "pipeline": "Integrated"
+        },
         "endpoints": {
             "health": "/api/health",
             "search": "/api/search",
             "chat": "/api/chat",
-            "collections": "/api/collections"
+            "collections": "/api/collections",
+            "pipeline": "/api/pipeline"
         }
     }
 
 @app.get("/api/health")
 async def health_check():
-    """Enhanced health check endpoint for Railway"""
+    """Enhanced health check endpoint"""
     try:
         # Check database connection
         db_health = database.health_check()
@@ -128,14 +133,23 @@ async def health_check():
         # Check chatbot
         chatbot_status = "available" if chatbot else "not_available"
         
+        # Check pipeline directories
+        pipeline_status = "available"
+        required_dirs = ['sessions', 'media']
+        for dir_name in required_dirs:
+            if not Path(dir_name).exists():
+                pipeline_status = "directories_missing"
+                break
+        
         return {
             "success": True,
             "status": "healthy",
-            "environment": "railway",
+            "environment": "production",
             "database": db_health.get('status', 'unknown'),
             "vector_search": vector_status,
             "chatbot": chatbot_status,
-            "message": "Museum Archive API is running on Railway"
+            "pipeline": pipeline_status,
+            "message": "Museum Archive API with Pipeline is running"
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -146,7 +160,7 @@ async def health_check():
         }
 
 # ==========================================
-# DATABASE ENDPOINTS (using database module)
+# DATABASE ENDPOINTS
 # ==========================================
 
 @app.get("/api/collections")
@@ -316,7 +330,7 @@ if VECTOR_SEARCH_AVAILABLE:
             # Get database results
             db_results = database.search_database(query, None, limit)
             
-            # Combine with vector search (if available method exists)
+            # Combine with vector search
             if hasattr(vector_search, 'hybrid_search'):
                 hybrid_results = vector_search.hybrid_search(
                     collection, query, db_results, limit
@@ -372,7 +386,7 @@ if chatbot:
             raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# UPLOAD ENDPOINTS (using upload module)
+# UPLOAD ENDPOINTS
 # ==========================================
 
 @app.post("/api/upload/csv")
@@ -391,7 +405,7 @@ async def upload_interface():
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
-    """Simple dashboard for the museum archive"""
+    """Enhanced dashboard with pipeline integration"""
     html_content = """
     <!DOCTYPE html>
     <html>
@@ -406,7 +420,7 @@ async def dashboard():
                 min-height: 100vh;
             }
             .container { 
-                max-width: 900px; 
+                max-width: 1200px; 
                 margin: 0 auto; 
                 background: white;
                 border-radius: 15px;
@@ -422,59 +436,44 @@ async def dashboard():
                 font-size: 2.5em;
                 margin-bottom: 10px;
             }
-            .header p {
-                color: #666;
-                font-size: 1.1em;
-            }
-            .endpoints { 
+            .features-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
                 gap: 20px;
                 margin: 30px 0;
             }
-            .endpoint { 
-                background: #f8f9fa; 
-                padding: 20px; 
-                border-radius: 10px; 
+            .feature-card {
+                background: #f8f9fa;
+                padding: 25px;
+                border-radius: 10px;
                 border-left: 4px solid #667eea;
                 transition: transform 0.2s ease;
             }
-            .endpoint:hover {
+            .feature-card:hover {
                 transform: translateY(-2px);
                 box-shadow: 0 5px 15px rgba(0,0,0,0.1);
             }
-            .method { 
-                font-weight: bold; 
-                color: #667eea; 
-                font-size: 1.1em;
-                margin-bottom: 8px;
+            .feature-title {
+                font-size: 1.3em;
+                font-weight: bold;
+                color: #333;
+                margin-bottom: 10px;
             }
-            .description {
-                color: #555;
-                line-height: 1.4;
-            }
-            .quick-links {
-                background: #e3f2fd;
-                padding: 20px;
-                border-radius: 10px;
-                margin-top: 30px;
-            }
-            .quick-links h3 {
-                color: #1976d2;
+            .feature-description {
+                color: #666;
                 margin-bottom: 15px;
             }
-            .quick-links a {
-                display: inline-block;
-                background: #1976d2;
+            .feature-button {
+                background: #667eea;
                 color: white;
-                text-decoration: none;
                 padding: 8px 16px;
                 border-radius: 5px;
-                margin: 5px 10px 5px 0;
+                text-decoration: none;
+                display: inline-block;
                 transition: background 0.2s ease;
             }
-            .quick-links a:hover {
-                background: #1565c0;
+            .feature-button:hover {
+                background: #5a67d8;
             }
             .stats {
                 display: grid;
@@ -494,17 +493,13 @@ async def dashboard():
                 font-weight: bold;
                 margin-bottom: 5px;
             }
-            .stat-label {
-                opacity: 0.9;
-                font-size: 0.9em;
-            }
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1>🏛️ Museum Archive API</h1>
-                <p>Railway Deployment Dashboard</p>
+                <h1>🏛️ Museum Archive Dashboard</h1>
+                <p>Complete Digital Archive Management System</p>
             </div>
 
             <div class="stats">
@@ -520,48 +515,61 @@ async def dashboard():
                     <div class="stat-number" id="api-status">✅</div>
                     <div class="stat-label">API Status</div>
                 </div>
-            </div>
-            
-            <h2>Available Endpoints:</h2>
-            <div class="endpoints">
-                <div class="endpoint">
-                    <div class="method">GET /api/health</div>
-                    <div class="description">Health check and system status</div>
-                </div>
-                
-                <div class="endpoint">
-                    <div class="method">GET /api/collections</div>
-                    <div class="description">List all collections with record counts</div>
-                </div>
-                
-                <div class="endpoint">
-                    <div class="method">GET /api/search/database</div>
-                    <div class="description">Search database records using full-text search</div>
-                </div>
-                
-                <div class="endpoint">
-                    <div class="method">POST /api/chat</div>
-                    <div class="description">Chat with the museum archive bot</div>
-                </div>
-                
-                <div class="endpoint">
-                    <div class="method">POST /api/upload/csv</div>
-                    <div class="description">Upload CSV data to the archive</div>
-                </div>
-                
-                <div class="endpoint">
-                    <div class="method">POST /api/search/vector</div>
-                    <div class="description">Semantic vector search using ChromaDB</div>
+                <div class="stat-box">
+                    <div class="stat-number" id="pipeline-status">🏭</div>
+                    <div class="stat-label">Pipeline</div>
                 </div>
             </div>
             
-            <div class="quick-links">
-                <h3>🔗 Quick Links</h3>
-                <a href="/api/health">Health Check</a>
-                <a href="/api/collections">View Collections</a>
-                <a href="/api/search/database?q=pottery">Sample Search</a>
-                <a href="/upload">Upload CSV</a>
-                <a href="/docs">API Documentation</a>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-title">🏭 Image Processing Pipeline</div>
+                    <div class="feature-description">
+                        Complete pipeline for processing scanned documents: classification, 
+                        text extraction, and database import.
+                    </div>
+                    <a href="/api/pipeline/interface" class="feature-button">Start Pipeline</a>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">📁 Collection Management</div>
+                    <div class="feature-description">
+                        Browse and manage your digital collections with full metadata support.
+                    </div>
+                    <a href="/api/collections" class="feature-button">View Collections</a>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">📊 CSV Data Import</div>
+                    <div class="feature-description">
+                        Upload CSV files to bulk import metadata records into your collections.
+                    </div>
+                    <a href="/upload" class="feature-button">Upload CSV</a>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">🔍 Advanced Search</div>
+                    <div class="feature-description">
+                        Powerful search across all collections using full-text and semantic search.
+                    </div>
+                    <a href="/api/search/database?q=pottery" class="feature-button">Try Search</a>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">🤖 AI Assistant</div>
+                    <div class="feature-description">
+                        Chat with our AI assistant to explore the archive and get instant answers.
+                    </div>
+                    <a href="#" onclick="testChat()" class="feature-button">Test Chat</a>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-title">📖 API Documentation</div>
+                    <div class="feature-description">
+                        Complete API documentation for developers and integrations.
+                    </div>
+                    <a href="/docs" class="feature-button">View Docs</a>
+                </div>
             </div>
         </div>
 
@@ -569,17 +577,17 @@ async def dashboard():
             // Load dashboard stats
             async function loadStats() {
                 try {
-                    // Get health check data
                     const healthResponse = await fetch('/api/health');
                     const health = await healthResponse.json();
                     
                     if (health.success) {
                         document.getElementById('api-status').textContent = '✅';
+                        document.getElementById('pipeline-status').textContent = 
+                            health.pipeline === 'available' ? '✅' : '⚠️';
                     } else {
                         document.getElementById('api-status').textContent = '❌';
                     }
 
-                    // Get collections data
                     const collectionsResponse = await fetch('/api/collections');
                     const collections = await collectionsResponse.json();
                     
@@ -598,6 +606,30 @@ async def dashboard():
                 }
             }
 
+            async function testChat() {
+                try {
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: 'Hello! What can you tell me about the museum archive?'
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert(`AI Assistant Response:\n\n${result.data.message}`);
+                    } else {
+                        alert('AI Assistant is currently unavailable.');
+                    }
+                } catch (error) {
+                    alert('AI Assistant is currently unavailable.');
+                }
+            }
+
             // Load stats when page loads
             document.addEventListener('DOMContentLoaded', loadStats);
         </script>
@@ -611,12 +643,13 @@ async def dashboard():
 # ==========================================
 
 if __name__ == "__main__":
-    # Railway automatically sets the PORT environment variable
-    port = 8000
+    # Get port from environment or default
+    port = int(os.environ.get("PORT", 8000))
     
-    logger.info(f"Starting Museum Archive API on port {port}")
+    logger.info(f"Starting Museum Archive API with Pipeline on port {port}")
     logger.info(f"Vector search available: {VECTOR_SEARCH_AVAILABLE}")
     logger.info(f"Chatbot available: {chatbot is not None}")
+    logger.info("Pipeline integration: ✅ Available")
     
     uvicorn.run(
         "main:app",

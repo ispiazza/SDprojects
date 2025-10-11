@@ -1,0 +1,25 @@
+{
+  "id_number": "24.65",
+  "metadata": {
+    "handwritten_notes": [
+      "Y/A"
+    ],
+    "printed_labels": [
+      "ASTRAL",
+      "PHOTOGR'PHIC SERVICES",
+      "104 GUILDHALL ST., FOLKESTONE",
+      "TEL. 53126"
+    ],
+    "addresses": [
+      "104 GUILDHALL ST., FOLKESTONE"
+    ],
+    "other_markings": []
+  },
+  "extraction_notes": "All text is clear and legible.",
+  "processing_info": {
+    "image_path": "sessions/a8179aa3-74f6-48d0-a95b-e79886379afb/processed_images/013/Image_013B.jpg",
+    "directory": "013",
+    "processed_at": "2025-08-22 16:26:44",
+    "model_used": "gpt-4o"
+  }
+}

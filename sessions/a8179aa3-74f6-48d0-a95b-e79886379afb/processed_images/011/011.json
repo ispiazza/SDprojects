@@ -1,0 +1,16 @@
+{
+  "id_number": "24.40",
+  "metadata": {
+    "handwritten_notes": [],
+    "printed_labels": [],
+    "addresses": [],
+    "other_markings": []
+  },
+  "extraction_notes": "Only the ID number '24.40' was found in the bottom left corner. No other text is present.",
+  "processing_info": {
+    "image_path": "sessions/a8179aa3-74f6-48d0-a95b-e79886379afb/processed_images/011/Image_011B.jpg",
+    "directory": "011",
+    "processed_at": "2025-08-22 16:26:23",
+    "model_used": "gpt-4o"
+  }
+}

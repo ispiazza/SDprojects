@@ -1,0 +1,17 @@
+{
+  "id_number": "not_found",
+  "metadata": {
+    "raw_extraction": "```json\n{\n  \"id_number\": \"26.43\",\n  \"metadata\": {\n    \"handwritten_notes\": [],\n    \"printed_labels\": [\n      \"FOLKESTONE INTERNATIONAL FOLKLOR FESTIVAL 1989\",\n      \"Greetings and Welcome from the Chairman of Shepway District Council, Councillor Tony Deighton\",\n      \"Two years ago I was delighted to be able to attend the Folkestone International Folklore Festival for the first time and since then, the memories remain. I feel sure that among others we will all remember the wonderful Turkish dancers who introduced a new dimension this Festival by capturing our hearts.\",\n      \"Participants look forward to the 1989 Festival hoping to meet both old and new friends.\",\n      \"Following this year's highly successful International Menuhin Violin competition, Folkestone, very definitely the gateway to Britain, must learn to exploit this to our advantage.\",\n      \"I would like to take this opportunity to thank Festival Committee who have worked out the whole year, for it has, every two years, broken down the barriers in life, music, dancing and, above all, friendship, have made this festival unique and this year is no exception.\",\n      \"Civic Centre, Folkestone, 14th April 1989\",\n      \"GREETINGS\",\n      \"From the Festival President\",\n      \"For the past few months the media have been informing us that from 1992 Western Europe should be an area almost without frontiers. This festival has done even more over the past 28 years, for it has, every two years, broken down the barriers in life, music, dancing and, above all, friendship, have made this festival unique and this year is no exception.\",\n      \"Each group and a return visit by our colourful friends from Poland. A first will be a group from the cradle of our civilization - Greece.\",\n      \"Whilst the Swedes, as always celebrate their Midsummer Pole, we'll enjoy more lively music from Portugal and warmly greet here again.\",\n      \"Such a marvellous diversity and mixing of cultures and above all such an atmosphere of friendship and happiness. However to make it happen requires hosts and in order to continue, also your support. Come to our concerts and I promise you will enjoy yourselves and help to keep being a festival that adds, we trust, to better understanding our fellow monks.\",\n      \"J.M. Jacques, President\",\n      \"Front cover: GREECE\"\n    ],\n    \"",
+    "handwritten_notes": [],
+    "printed_labels": [],
+    "addresses": [],
+    "other_markings": []
+  },
+  "extraction_notes": "Could not parse as structured JSON, raw text included",
+  "processing_info": {
+    "image_path": "sessions/a8179aa3-74f6-48d0-a95b-e79886379afb/processed_images/007/Image_007B.jpg",
+    "directory": "007",
+    "processed_at": "2025-08-22 16:26:08",
+    "model_used": "gpt-4o"
+  }
+}

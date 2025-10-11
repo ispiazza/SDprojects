@@ -1,0 +1,9 @@
+directory,id_number,front_image_path,back_image_path,extraction_notes,handwritten_notes,printed_labels,addresses,other_markings,processed_at,model_used,has_error,error_message,flags
+007,not_found,007/Image_008A.jpg,007/Image_007B.jpg,"Could not parse as structured JSON, raw text included",,,,,2025-08-22 16:26:08,gpt-4o,False,,
+003,23.62,003/Image_004A.jpg,003/Image_003B.jpg,The ID number is clear. The handwritten note 'm 32' is also clear.,m 32,,,,2025-08-22 16:26:13,gpt-4o,False,,
+005,23.8,005/Image_006A.jpg,005/Image_005B.jpg,The ID number '23.8' is located in the top left corner. 'D20' is centered on the image.,,,,D20,2025-08-22 16:26:19,gpt-4o,False,,
+011,24.40,011/Image_012A.jpg,011/Image_011B.jpg,Only the ID number '24.40' was found in the bottom left corner. No other text is present.,,,,,2025-08-22 16:26:23,gpt-4o,False,,no_text
+009,26.3,009/Image_010A.jpg,009/Image_009B.jpg,The printed labels are faint but legible. No handwritten notes or addresses were found.,,"7/10/02, 21/08/2002, MAH",,,2025-08-22 16:26:30,gpt-4o,False,,
+001,23.82,001/Image_002A.jpg,001/Image_001B.jpg,The text '1923' is faint and may not be complete.,"N.B -, cut off festival date!","MR. ARTHUR JORDAN AND, MRS. EVRA JORDAN, MID-STREAMS, GREEN LANE, HYTHE, KENT CT21 4DY, TEL. (0303) 69119","MID-STREAMS, GREEN LANE, HYTHE, KENT CT21 4DY","45/12, 1923",2025-08-22 16:26:38,gpt-4o,False,,
+013,24.65,013/Image_014A.jpg,013/Image_013B.jpg,All text is clear and legible.,Y/A,"ASTRAL, PHOTOGR'PHIC SERVICES, 104 GUILDHALL ST., FOLKESTONE, TEL. 53126","104 GUILDHALL ST., FOLKESTONE",,2025-08-22 16:26:44,gpt-4o,False,,
+015,24.35,015/Image_016A.jpg,015/Image_015B.jpg,The image contains only the ID number '24.35' in the bottom left corner. No other text is visible.,,,,,2025-08-22 16:26:49,gpt-4o,False,,no_text

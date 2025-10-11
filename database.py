@@ -1,6 +1,6 @@
 """
-Fixed database.py for Railway PostgreSQL SSL connection
-Handles Railway's self-signed certificates properly
+Fixed database.py - Works both locally and on Railway
+Automatically detects environment and uses correct connection method
 """
 import os
 import logging
@@ -19,62 +19,101 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 def get_database_config():
-    """Get database configuration - prioritize DATABASE_URL for Railway"""
+    """
+    Get database configuration - intelligently detects local vs Railway environment
+    Priority:
+    1. DATABASE_PUBLIC_URL (for local connections via Railway TCP proxy)
+    2. DATABASE_URL (for Railway internal connections)
+    3. Individual PG variables
+    """
     
-    # First, try to use DATABASE_URL if available (Railway provides this)
-    database_url = os.getenv('DATABASE_URL')
-    if database_url:
-        logger.info("Using DATABASE_URL for connection")
-        import urllib.parse
-        try:
-            parsed = urllib.parse.urlparse(database_url)
-            return {
-                'host': parsed.hostname,
-                'port': parsed.port or 5432,
-                'database': parsed.path.lstrip('/'),
-                'user': parsed.username,
-                'password': parsed.password,
-                'sslmode': 'require',
-            }
-        except Exception as e:
-            logger.warning(f"Failed to parse DATABASE_URL: {e}")
-    
-    # Check if we're in actual Railway deployment
-    is_railway_deployment = (
+    # Check if we're running locally (not in Railway deployment)
+    is_local = not (
         os.getenv('RAILWAY_STATIC_URL') or 
         os.getenv('RAILWAY_PUBLIC_DOMAIN') or
         (os.getenv('PORT') and not os.getenv('RAILWAY_SHELL'))
     )
     
-    if is_railway_deployment:
-        logger.info("Detected Railway deployment - using internal connection")
+    if is_local:
+        # LOCAL ENVIRONMENT - Use DATABASE_PUBLIC_URL
+        logger.info("🏠 Detected LOCAL environment - using DATABASE_PUBLIC_URL")
+        
+        database_public_url = os.getenv('DATABASE_PUBLIC_URL')
+        if database_public_url:
+            logger.info(f"Using DATABASE_PUBLIC_URL: {database_public_url[:40]}...")
+            import urllib.parse
+            try:
+                parsed = urllib.parse.urlparse(database_public_url)
+                return {
+                    'host': parsed.hostname,
+                    'port': parsed.port or 5432,
+                    'database': parsed.path.lstrip('/'),
+                    'user': parsed.username,
+                    'password': parsed.password,
+                    'sslmode': 'require',  # Railway requires SSL
+                }
+            except Exception as e:
+                logger.warning(f"Failed to parse DATABASE_PUBLIC_URL: {e}")
+        
+        # Fallback: Try to construct from TCP proxy variables
+        tcp_proxy_domain = os.getenv('RAILWAY_TCP_PROXY_DOMAIN')
+        tcp_proxy_port = os.getenv('RAILWAY_TCP_PROXY_PORT')
+        
+        if tcp_proxy_domain and tcp_proxy_port:
+            logger.info(f"Using TCP Proxy: {tcp_proxy_domain}:{tcp_proxy_port}")
+            return {
+                'host': tcp_proxy_domain,
+                'port': int(tcp_proxy_port),
+                'database': os.getenv('PGDATABASE', 'railway'),
+                'user': os.getenv('PGUSER', 'postgres'),
+                'password': os.getenv('PGPASSWORD'),
+                'sslmode': 'require',
+            }
+    
+    else:
+        # RAILWAY DEPLOYMENT - Use internal connection
+        logger.info("🚂 Detected RAILWAY deployment - using internal connection")
+        
+        # Try DATABASE_URL first (internal)
+        database_url = os.getenv('DATABASE_URL')
+        if database_url and 'railway.internal' in database_url:
+            logger.info("Using internal DATABASE_URL")
+            import urllib.parse
+            try:
+                parsed = urllib.parse.urlparse(database_url)
+                return {
+                    'host': parsed.hostname,
+                    'port': parsed.port or 5432,
+                    'database': parsed.path.lstrip('/'),
+                    'user': parsed.username,
+                    'password': parsed.password,
+                }
+            except Exception as e:
+                logger.warning(f"Failed to parse DATABASE_URL: {e}")
+        
+        # Fallback to individual variables (internal hostname)
         return {
-            'host': 'postgres.railway.internal',
-            'port': 5432,
+            'host': os.getenv('PGHOST', 'postgres.railway.internal'),
+            'port': int(os.getenv('PGPORT', 5432)),
             'database': os.getenv('PGDATABASE', 'railway'),
             'user': os.getenv('PGUSER', 'postgres'),
             'password': os.getenv('PGPASSWORD'),
         }
-    else:
-        logger.info("Using external database connection (Railway shell or local)")
-        # For external connections to Railway, we need special SSL handling
-        return {
-            'host': os.getenv('PGHOST'),
-            'port': int(os.getenv('PGPORT', 5432)),
-            'database': os.getenv('PGDATABASE'),
-            'user': os.getenv('PGUSER'),
-            'password': os.getenv('PGPASSWORD'),
-            # Railway uses self-signed certificates, so we need sslmode=require
-            # This requires SSL but doesn't verify the certificate chain
-            'sslmode': 'require',
-            'sslcert': None,
-            'sslkey': None,
-            'sslrootcert': None,
-        }
+    
+    # Final fallback - use whatever we can find
+    logger.warning("⚠️  Using fallback configuration")
+    return {
+        'host': os.getenv('PGHOST', 'localhost'),
+        'port': int(os.getenv('PGPORT', 5432)),
+        'database': os.getenv('PGDATABASE', 'postgres'),
+        'user': os.getenv('PGUSER', 'postgres'),
+        'password': os.getenv('PGPASSWORD', ''),
+        'sslmode': 'require',
+    }
 
 # Get the configuration
 DB_CONFIG = get_database_config()
-logger.info(f"Database config: host={DB_CONFIG.get('host')}, port={DB_CONFIG.get('port')}, sslmode={DB_CONFIG.get('sslmode', 'none')}")
+logger.info(f"📊 Database config: host={DB_CONFIG.get('host')}, port={DB_CONFIG.get('port')}, database={DB_CONFIG.get('database')}")
 
 class DatabaseError(Exception):
     """Custom exception for database operations"""
@@ -82,57 +121,63 @@ class DatabaseError(Exception):
 
 
 def get_db_connection():
-    """Get PostgreSQL database connection with Railway SSL handling"""
+    """Get PostgreSQL database connection with smart error handling"""
     connection_attempts = [
         # Attempt 1: Use the configured settings
         DB_CONFIG,
         
-        # Attempt 2: If SSL fails, try with SSL verification disabled for Railway
-        {**DB_CONFIG, 'sslmode': 'prefer'} if 'sslmode' in DB_CONFIG else DB_CONFIG,
+        # Attempt 2: Try with different SSL mode if first fails
+        {**DB_CONFIG, 'sslmode': 'prefer'} if 'sslmode' in DB_CONFIG else None,
         
-        # Attempt 3: Force disable SSL for development
-        {k: v for k, v in DB_CONFIG.items() if k != 'sslmode'} if 'sslmode' in DB_CONFIG else None,
-        
-        # Attempt 4: Use connection string format
-        None  # Will be handled specially
+        # Attempt 3: Try without SSL
+        {k: v for k, v in DB_CONFIG.items() if k != 'sslmode'},
     ]
     
+    last_error = None
+    
     for i, config in enumerate(connection_attempts):
-        if config is None and i < 3:
+        if config is None:
             continue
             
         try:
-            if i < 3:
-                logger.info(f"Connection attempt {i+1}: {config.get('sslmode', 'default')}")
-                conn = psycopg2.connect(**config, cursor_factory=RealDictCursor)
-                logger.info(f"✅ Connected successfully on attempt {i+1}")
-                return conn
-            else:
-                # Attempt 4: Direct connection string (Railway often provides DATABASE_URL)
-                database_url = os.getenv('DATABASE_URL')
-                if database_url:
-                    logger.info("Connection attempt 4: Using DATABASE_URL")
-                    conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
-                    logger.info("✅ Connected successfully with DATABASE_URL")
-                    return conn
+            logger.info(f"🔌 Connection attempt {i+1}/{len(connection_attempts)}")
+            conn = psycopg2.connect(**config, cursor_factory=RealDictCursor)
+            logger.info(f"✅ Connected successfully on attempt {i+1}")
+            return conn
                     
         except psycopg2.OperationalError as e:
+            last_error = e
             error_msg = str(e).lower()
+            
             if "ssl" in error_msg or "certificate" in error_msg:
-                logger.warning(f"Attempt {i+1} SSL error: {e}")
+                logger.warning(f"⚠️  Attempt {i+1} SSL error: {e}")
+                continue
+            elif "translate host name" in error_msg or "name or service not known" in error_msg:
+                logger.error(f"❌ Attempt {i+1} - Cannot resolve hostname: {config.get('host')}")
+                logger.error("💡 Make sure you're using DATABASE_PUBLIC_URL for local connections!")
                 continue
             else:
-                logger.error(f"Attempt {i+1} failed: {e}")
-                if i == len(connection_attempts) - 1:
-                    raise DatabaseError(f"All connection attempts failed. Last error: {str(e)}")
+                logger.error(f"❌ Attempt {i+1} failed: {e}")
+                if i == len([c for c in connection_attempts if c]) - 1:
+                    break
                 continue
+                
         except Exception as e:
-            logger.error(f"Attempt {i+1} unexpected error: {e}")
-            if i == len(connection_attempts) - 1:
-                raise DatabaseError(f"All connection attempts failed. Last error: {str(e)}")
+            last_error = e
+            logger.error(f"❌ Attempt {i+1} unexpected error: {e}")
+            if i == len([c for c in connection_attempts if c]) - 1:
+                break
             continue
     
-    raise DatabaseError("All connection attempts exhausted")
+    # All attempts failed
+    error_message = f"All connection attempts failed. Last error: {str(last_error)}"
+    logger.error(f"💥 {error_message}")
+    logger.error("🔍 Troubleshooting:")
+    logger.error("   - Check if DATABASE_PUBLIC_URL is set (for local)")
+    logger.error("   - Check if Railway services are running: railway status")
+    logger.error("   - Try: railway run python your_script.py")
+    
+    raise DatabaseError(error_message)
 
 
 @contextmanager
@@ -164,22 +209,22 @@ def test_connection() -> Dict[str, Any]:
             cursor.execute("SELECT version(), current_database(), current_user;")
             result = cursor.fetchone()
             
-            # Test SSL status (using a more compatible method)
+            # Test SSL status (fixed for RealDictCursor)
             ssl_used = False
             try:
-                # Check if we're using SSL (this method works on more PostgreSQL versions)
                 cursor.execute("SHOW ssl;")
-                ssl_setting = cursor.fetchone()[0]
-                ssl_used = ssl_setting.lower() == 'on'
+                ssl_result = cursor.fetchone()
+                # RealDictCursor returns a dict, get the 'ssl' key value
+                ssl_setting = list(ssl_result.values())[0] if ssl_result else 'off'
+                ssl_used = str(ssl_setting).lower() == 'on'
             except:
-                # If that fails, assume SSL is working if we connected successfully
-                ssl_used = True
+                ssl_used = True  # Assume SSL if we connected successfully
             
             return {
                 'success': True,
-                'version': result[0][:50] + '...' if result[0] else 'Unknown',
-                'database': result[1],
-                'user': result[2],
+                'version': result['version'][:50] + '...' if result and result.get('version') else 'Unknown',
+                'database': result['current_database'] if result else 'Unknown',
+                'user': result['current_user'] if result else 'Unknown',
                 'ssl_enabled': ssl_used,
                 'host': DB_CONFIG.get('host'),
                 'port': DB_CONFIG.get('port')
@@ -190,7 +235,6 @@ def test_connection() -> Dict[str, Any]:
             'error': str(e),
             'config_used': {k: '***' if 'password' in k.lower() else v for k, v in DB_CONFIG.items()}
         }
-
 
 def list_collections() -> List[Dict[str, Any]]:
     """List all collections in the database with record counts"""
@@ -449,7 +493,7 @@ def delete_record(record_id: str) -> bool:
         raise DatabaseError(f"Failed to delete record: {str(e)}")
 
 def health_check() -> Dict[str, Any]:
-    """Check database health with fixed RealDictCursor access"""
+    """Check database health"""
     try:
         with get_db_cursor() as (cursor, conn):
             # Simple connectivity test
@@ -461,7 +505,7 @@ def health_check() -> Dict[str, Any]:
             tables_result = cursor.fetchone()
             tables_count = tables_result['count']
             
-            # Try to get collection and record counts (if tables exist)
+            # Try to get collection and record counts
             collections_count = 0
             records_count = 0
             
@@ -474,7 +518,6 @@ def health_check() -> Dict[str, Any]:
                 records_result = cursor.fetchone()
                 records_count = records_result['count']
             except:
-                # Tables don't exist yet, that's okay
                 pass
             
             return {
