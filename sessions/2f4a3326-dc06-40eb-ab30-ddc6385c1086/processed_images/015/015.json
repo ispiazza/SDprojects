@@ -1,0 +1,16 @@
+{
+  "id_number": "24.35",
+  "metadata": {
+    "handwritten_notes": [],
+    "printed_labels": [],
+    "addresses": [],
+    "other_markings": []
+  },
+  "extraction_notes": "No other text or markings were visible on the image.",
+  "processing_info": {
+    "image_path": "sessions/2f4a3326-dc06-40eb-ab30-ddc6385c1086/processed_images/015/Image_015B.jpg",
+    "directory": "015",
+    "processed_at": "2025-10-11 13:38:56",
+    "model_used": "gpt-4o"
+  }
+}

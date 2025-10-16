@@ -1,0 +1,26 @@
+{
+  "id_number": "26.3",
+  "metadata": {
+    "handwritten_notes": [],
+    "printed_labels": [
+      "10/12/2002"
+    ],
+    "addresses": [],
+    "other_markings": [
+      "7/20/02",
+      "NH",
+      "NH",
+      "NH",
+      "NH",
+      "NH",
+      "NH"
+    ]
+  },
+  "extraction_notes": "The text is faint and difficult to read, especially the repeated 'NH' markings.",
+  "processing_info": {
+    "image_path": "sessions/82198b91-252b-4136-af95-1f1c416959f2/processed_images/009/Image_009B.jpg",
+    "directory": "009",
+    "processed_at": "2025-10-11 13:32:59",
+    "model_used": "gpt-4o"
+  }
+}

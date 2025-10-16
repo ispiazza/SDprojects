@@ -147,12 +147,31 @@ class CompletePipelineProcessor:
             self.metadata['table_data'] = table_result
             logger.info("Table generation completed")
             
+            import webbrowser
+            # Open via web server
+            server_url = f"http://localhost:8000/api/pipeline/view/{self.session_id}"
+            logger.info(f"🌐 Opening results at: {server_url}")
+            try:
+                webbrowser.open(server_url)
+            except Exception as e:
+                logger.warning(f"Could not auto-open browser: {e}")
+                logger.info(f"📋 Manually open: {server_url}")
+
             # 5: Import to database
-            self.update_status('processing', 'database_import')
-            logger.info("Starting database import...")
-            db_import_result = self._import_to_database(final_dir)
-            self.metadata['steps_completed'].append('database_import')
-            logger.info("Database import completed")
+            #self.update_status('processing', 'database_import')
+            #logger.info("Starting database import...")
+            #db_import_result = self._import_to_database(final_dir)
+            #self.metadata['steps_completed'].append('database_import')
+            #logger.info("Database import completed")
+            
+            # TESTING MODE - Skip database import
+            logger.info("⚠️  TESTING MODE: Database import skipped")
+            db_import_result = {
+                'success': True,
+                'records_created': 0,
+                'note': 'Database import disabled for testing'
+            }
+
             
             # Count final results
             image_count = len([f for f in final_dir.rglob("*") if f.suffix.lower() in {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp'}])
@@ -463,6 +482,24 @@ class CompletePipelineProcessor:
 
 # Create FastAPI router for pipeline endpoints
 pipeline_router = APIRouter(prefix="/api/pipeline", tags=["Pipeline"])
+
+@pipeline_router.get("/view/{session_id}", response_class=HTMLResponse)
+async def view_results(session_id: str):
+    """View the HTML results table"""
+    if session_id not in active_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    processor = active_sessions[session_id]
+    html_path = processor.processed_dir / "processing_summary.html"
+    
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Results not yet available")
+    
+    # Read and return the HTML content
+    with open(html_path, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    
+    return HTMLResponse(content=html_content)
 
 @pipeline_router.post("/process")
 async def process_pipeline(

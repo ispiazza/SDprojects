@@ -1,0 +1,31 @@
+{
+  "id_number": "23.82",
+  "metadata": {
+    "handwritten_notes": [
+      "45/12",
+      "N.B -",
+      "cut off festival date!"
+    ],
+    "printed_labels": [
+      "MR. ARTHUR JORDAN AND",
+      "MRS. EVRA JORDAN",
+      "MID-STREAMS",
+      "GREEN LANE",
+      "HYTHE, KENT CT21 4DY",
+      "TEL. (0303) 69119"
+    ],
+    "addresses": [
+      "MID-STREAMS, GREEN LANE, HYTHE, KENT CT21 4DY"
+    ],
+    "other_markings": [
+      "1923"
+    ]
+  },
+  "extraction_notes": "The handwritten text '1923' is slightly faded but legible.",
+  "processing_info": {
+    "image_path": "sessions/82198b91-252b-4136-af95-1f1c416959f2/processed_images/001/Image_001B.jpg",
+    "directory": "001",
+    "processed_at": "2025-10-11 13:33:17",
+    "model_used": "gpt-4o"
+  }
+}

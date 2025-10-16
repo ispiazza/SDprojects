@@ -1,0 +1,45 @@
+{
+  "session_id": "afd6c03e-46c0-4cfc-9500-37a4b2899917",
+  "created_at": "2025-10-11T13:31:06.996811",
+  "status": "review_ready",
+  "steps_completed": [
+    "scan_formatting",
+    "classify_rename",
+    "text_extraction",
+    "generate_table",
+    "database_import"
+  ],
+  "current_step": "awaiting_review",
+  "files_info": {
+    "original_zip": "scans (2).zip"
+  },
+  "table_data": {
+    "success": true,
+    "data_rows": [],
+    "stats": {
+      "total_items": 0,
+      "duplicates": 0,
+      "quality_issues": 0,
+      "processing_errors": 0,
+      "missing_ids": 0,
+      "generated_at": "2025-10-11 13:31:09"
+    },
+    "csv_path": "sessions/afd6c03e-46c0-4cfc-9500-37a4b2899917/processed_images/processing_summary.csv",
+    "html_path": "sessions/afd6c03e-46c0-4cfc-9500-37a4b2899917/processed_images/processing_summary.html",
+    "total_items": 0,
+    "duplicates_found": 0,
+    "quality_issues": 0,
+    "processing_errors": 0
+  },
+  "stats": {
+    "directories_created": 8,
+    "images_processed": 16,
+    "front_images": 8,
+    "back_images": 8,
+    "json_files_created": -2,
+    "database_records_created": 0,
+    "processing_complete": true,
+    "steps_completed": "all_steps_complete"
+  },
+  "updated_at": "2025-10-11T13:31:09.988910"
+}

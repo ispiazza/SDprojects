@@ -1,0 +1,18 @@
+{
+  "id_number": "23.62",
+  "metadata": {
+    "handwritten_notes": [
+      "m 32"
+    ],
+    "printed_labels": [],
+    "addresses": [],
+    "other_markings": []
+  },
+  "extraction_notes": "The ID number is clear. The handwritten note 'm 32' is also clear.",
+  "processing_info": {
+    "image_path": "sessions/2f4a3326-dc06-40eb-ab30-ddc6385c1086/processed_images/003/Image_003B.jpg",
+    "directory": "003",
+    "processed_at": "2025-10-11 13:38:27",
+    "model_used": "gpt-4o"
+  }
+}

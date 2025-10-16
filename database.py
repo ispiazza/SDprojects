@@ -23,7 +23,7 @@ def get_database_config():
     Get database configuration - intelligently detects local vs Railway environment
     Priority:
     1. DATABASE_PUBLIC_URL (for local connections via Railway TCP proxy)
-    2. DATABASE_URL (for Railway internal connections)
+    2. DATABASE_URL (for Railway internal connections AND local fallback)
     3. Individual PG variables
     """
     
@@ -35,7 +35,7 @@ def get_database_config():
     )
     
     if is_local:
-        # LOCAL ENVIRONMENT - Use DATABASE_PUBLIC_URL
+        # LOCAL ENVIRONMENT - Use DATABASE_PUBLIC_URL first
         logger.info("🏠 Detected LOCAL environment - using DATABASE_PUBLIC_URL")
         
         database_public_url = os.getenv('DATABASE_PUBLIC_URL')
@@ -55,7 +55,25 @@ def get_database_config():
             except Exception as e:
                 logger.warning(f"Failed to parse DATABASE_PUBLIC_URL: {e}")
         
-        # Fallback: Try to construct from TCP proxy variables
+        # Fallback for local: Try DATABASE_URL
+        database_url = os.getenv('DATABASE_URL')
+        if database_url:
+            logger.info("Falling back to DATABASE_URL for local environment")
+            import urllib.parse
+            try:
+                parsed = urllib.parse.urlparse(database_url)
+                return {
+                    'host': parsed.hostname,
+                    'port': parsed.port or 5432,
+                    'database': parsed.path.lstrip('/'),
+                    'user': parsed.username,
+                    'password': parsed.password,
+                    'sslmode': 'require',
+                }
+            except Exception as e:
+                logger.warning(f"Failed to parse DATABASE_URL: {e}")
+        
+        # Final fallback: Try to construct from TCP proxy variables
         tcp_proxy_domain = os.getenv('RAILWAY_TCP_PROXY_DOMAIN')
         tcp_proxy_port = os.getenv('RAILWAY_TCP_PROXY_PORT')
         
@@ -71,27 +89,35 @@ def get_database_config():
             }
     
     else:
-        # RAILWAY DEPLOYMENT - Use internal connection
-        logger.info("🚂 Detected RAILWAY deployment - using internal connection")
+        # RAILWAY DEPLOYMENT - Use DATABASE_URL (no 'railway.internal' check needed)
+        logger.info("🚂 Detected RAILWAY deployment - using DATABASE_URL")
         
-        # Try DATABASE_URL first (internal)
         database_url = os.getenv('DATABASE_URL')
-        if database_url and 'railway.internal' in database_url:
-            logger.info("Using internal DATABASE_URL")
+        if database_url:
+            logger.info(f"Using DATABASE_URL: {database_url[:40]}...")
             import urllib.parse
             try:
                 parsed = urllib.parse.urlparse(database_url)
-                return {
+                config = {
                     'host': parsed.hostname,
                     'port': parsed.port or 5432,
                     'database': parsed.path.lstrip('/'),
                     'user': parsed.username,
                     'password': parsed.password,
                 }
+                
+                # Add SSL mode only if not using internal Railway connection
+                if 'railway.internal' not in str(parsed.hostname):
+                    config['sslmode'] = 'require'
+                
+                logger.info(f"Using database host: {parsed.hostname}, database: {parsed.path.lstrip('/')}")
+                return config
+                
             except Exception as e:
                 logger.warning(f"Failed to parse DATABASE_URL: {e}")
         
         # Fallback to individual variables (internal hostname)
+        logger.info("Falling back to individual PG environment variables")
         return {
             'host': os.getenv('PGHOST', 'postgres.railway.internal'),
             'port': int(os.getenv('PGPORT', 5432)),
@@ -141,6 +167,7 @@ def get_db_connection():
             
         try:
             logger.info(f"🔌 Connection attempt {i+1}/{len(connection_attempts)}")
+            logger.debug(f"Attempting connection to: {config.get('host')}:{config.get('port')}")
             conn = psycopg2.connect(**config, cursor_factory=RealDictCursor)
             logger.info(f"✅ Connected successfully on attempt {i+1}")
             return conn
@@ -155,6 +182,12 @@ def get_db_connection():
             elif "translate host name" in error_msg or "name or service not known" in error_msg:
                 logger.error(f"❌ Attempt {i+1} - Cannot resolve hostname: {config.get('host')}")
                 logger.error("💡 Make sure you're using DATABASE_PUBLIC_URL for local connections!")
+                continue
+            elif "connection refused" in error_msg:
+                logger.error(f"❌ Attempt {i+1} - Connection refused to: {config.get('host')}:{config.get('port')}")
+                continue
+            elif "no such file or directory" in error_msg and "/tmp" in error_msg:
+                logger.error(f"❌ Attempt {i+1} - Unix socket error (this should not happen on Railway): {e}")
                 continue
             else:
                 logger.error(f"❌ Attempt {i+1} failed: {e}")
@@ -173,7 +206,8 @@ def get_db_connection():
     error_message = f"All connection attempts failed. Last error: {str(last_error)}"
     logger.error(f"💥 {error_message}")
     logger.error("🔍 Troubleshooting:")
-    logger.error("   - Check if DATABASE_PUBLIC_URL is set (for local)")
+    logger.error("   - Check if DATABASE_URL is set correctly")
+    logger.error("   - For local: Check if DATABASE_PUBLIC_URL is set")
     logger.error("   - Check if Railway services are running: railway status")
     logger.error("   - Try: railway run python your_script.py")
     

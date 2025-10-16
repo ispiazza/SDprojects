@@ -1,0 +1,20 @@
+{
+  "id_number": "26.3",
+  "metadata": {
+    "handwritten_notes": [],
+    "printed_labels": [
+      "7/10/02",
+      "21/10/02",
+      "H. H. H. H. H. H. H. H."
+    ],
+    "addresses": [],
+    "other_markings": []
+  },
+  "extraction_notes": "The printed text is faint and vertically oriented, which may affect clarity.",
+  "processing_info": {
+    "image_path": "sessions/2f4a3326-dc06-40eb-ab30-ddc6385c1086/processed_images/009/Image_009B.jpg",
+    "directory": "009",
+    "processed_at": "2025-10-11 13:38:40",
+    "model_used": "gpt-4o"
+  }
+}

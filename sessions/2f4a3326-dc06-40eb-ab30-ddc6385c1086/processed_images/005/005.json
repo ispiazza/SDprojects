@@ -1,0 +1,18 @@
+{
+  "id_number": "23.8",
+  "metadata": {
+    "handwritten_notes": [
+      "D20"
+    ],
+    "printed_labels": [],
+    "addresses": [],
+    "other_markings": []
+  },
+  "extraction_notes": "The ID number '23.8' is handwritten in the top left corner. The note 'D20' is also handwritten in the center.",
+  "processing_info": {
+    "image_path": "sessions/2f4a3326-dc06-40eb-ab30-ddc6385c1086/processed_images/005/Image_005B.jpg",
+    "directory": "005",
+    "processed_at": "2025-10-11 13:38:32",
+    "model_used": "gpt-4o"
+  }
+}

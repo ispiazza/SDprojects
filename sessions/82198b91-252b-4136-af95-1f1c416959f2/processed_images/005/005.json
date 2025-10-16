@@ -1,0 +1,18 @@
+{
+  "id_number": "23.82",
+  "metadata": {
+    "handwritten_notes": [
+      "D20"
+    ],
+    "printed_labels": [],
+    "addresses": [],
+    "other_markings": []
+  },
+  "extraction_notes": "The ID number '23.82' is located in the top left corner. The handwritten note 'D20' is clear.",
+  "processing_info": {
+    "image_path": "sessions/82198b91-252b-4136-af95-1f1c416959f2/processed_images/005/Image_005B.jpg",
+    "directory": "005",
+    "processed_at": "2025-10-11 13:32:51",
+    "model_used": "gpt-4o"
+  }
+}
