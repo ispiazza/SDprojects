@@ -25,6 +25,7 @@ from pydantic import BaseModel
 # Import your existing modules
 import database
 from models.base import DublinCoreRecord
+from database.processing_operations import ProcessingDatabase
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -141,21 +142,62 @@ class CompletePipelineProcessor:
             
             self.update_status('processing', 'generate_table')
             # 4: Generate data table
+            self.update_status('processing', 'generate_table')
             logger.info("Starting table generation...")
             table_result = self._generate_data_table(final_dir)
             self.metadata['steps_completed'].append('generate_table')
             self.metadata['table_data'] = table_result
             logger.info("Table generation completed")
-            
+
+            # NEW: Step 4.5 - Save to temp database
+            logger.info("Saving to temporary database...")
+            self._save_to_temp_database(table_result)
+            logger.info("✓ Data saved to temp database")
+
+            # Auto-open HTML table in browser
             import webbrowser
-            # Open via web server
-            server_url = f"http://localhost:8000/api/pipeline/view/{self.session_id}"
-            logger.info(f"🌐 Opening results at: {server_url}")
-            try:
-                webbrowser.open(server_url)
-            except Exception as e:
-                logger.warning(f"Could not auto-open browser: {e}")
-                logger.info(f"📋 Manually open: {server_url}")
+            html_path = table_result.get('html_path')
+            if html_path and Path(html_path).exists():
+                logger.info(f"Opening HTML table in browser: {html_path}")
+                webbrowser.open(f'file://{Path(html_path).absolute()}')
+
+            def _save_to_temp_database(self, table_result: dict):
+                """Save processing results to temporary database table"""                
+                logger.info("Saving to temporary database...")
+                
+                db = ProcessingDatabase()
+                
+                # Create session record
+                db.create_session(
+                    session_id=self.session_id,
+                    uploaded_filename=self.metadata.get('uploaded_filename', ''),
+                    session_path=str(self.session_dir)
+                )
+                
+                # Insert each item
+                for row in table_result.get('data_rows', []):
+                    item_data = {
+                        'session_id': self.session_id,
+                        'directory': row['directory'],
+                        'id_number': row.get('id_number', ''),
+                        'front_image_path': row['front_image_path'],
+                        'back_image_path': row['back_image_path'],
+                        'handwritten_notes': row.get('handwritten_notes', ''),
+                        'printed_labels': row.get('printed_labels', ''),
+                        'addresses': row.get('addresses', ''),
+                        'other_markings': row.get('other_markings', ''),
+                        'extraction_notes': row.get('extraction_notes', ''),
+                        'flags': row.get('flags', []),
+                        'processed_at': row.get('processed_at'),
+                        'model_used': row.get('model_used', 'gpt-4o')
+                    }
+                    db.insert_temp_item(item_data)
+                
+                # Update session stats
+                db.update_session_stats(self.session_id, table_result['stats'])
+                db.update_session_status(self.session_id, 'review_ready')
+                
+                logger.info(f"✓ Saved {len(table_result['data_rows'])} items to temp database")
 
             # 5: Import to database
             #self.update_status('processing', 'database_import')
